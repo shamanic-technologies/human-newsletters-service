@@ -20,20 +20,36 @@ jobs:
 
   test-integration:
     runs-on: ubuntu-latest
+
+    # A throwaway Postgres owned by the runner: no external database, no secret.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: human_newsletters_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      HUMAN_NEWSLETTERS_SERVICE_DATABASE_URL: postgresql://test:test@localhost:5432/human_newsletters_test
+      HUMAN_NEWSLETTERS_SERVICE_API_KEY: test-api-key
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm ci
-      - name: Push schema to dev DB
+      # The repo has no migrations folder yet: apply the schema directly.
+      - name: Push schema
         run: npx drizzle-kit push --force
-        env:
-          HUMAN_NEWSLETTERS_SERVICE_DATABASE_URL: ${{ secrets.HUMAN_NEWSLETTERS_SERVICE_DATABASE_URL_DEV }}
+      # No integration test file exists yet; the job turns real the day one lands.
       - name: Run integration tests
-        run: npm run test:integration
-        env:
-          HUMAN_NEWSLETTERS_SERVICE_DATABASE_URL: ${{ secrets.HUMAN_NEWSLETTERS_SERVICE_DATABASE_URL_DEV }}
-          HUMAN_NEWSLETTERS_SERVICE_API_KEY: test-api-key
-          RUNS_SERVICE_URL: https://runs.mcpfactory.org
-          RUNS_SERVICE_API_KEY: ${{ secrets.RUNS_SERVICE_API_KEY }}
+        run: npx vitest run tests/integration --passWithNoTests
